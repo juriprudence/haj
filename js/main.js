@@ -1,12 +1,11 @@
 import { LANE_WIDTH, JUMP_FORCE, GRAVITY, SLIDE_HEIGHT, DOG_CATCH_DISTANCE } from './config.js';
+import { createPlayer, updatePlayer, activateFlyPowerUp, resetPlayerState, incrementLane, decrementLane, setCurrentLane, setPlayerY, setIsJumping, setIsSliding, setJumpVelocity, getCurrentLane, getPlayerY, getIsJumping, getIsSliding, getJumpVelocity, isFlying, player, playerY, isJumping, isSliding, jumpVelocity, currentLane, playerMixer, isModelLoaded } from './player.js';
         
         // Game variables
-        let scene, camera, renderer, player, ground = [];
+        let scene, camera, renderer, ground = [];
         let obstacles = [], coins = [], particles = [];
         let gameSpeed = 0.2, score = 0, coinsCollected = 0;
-        let isGameRunning = true, isJumping = false, isSliding = false;
-        let currentLane = 0; // -1, 0, 1 for left, center, right
-        let jumpVelocity = 0, playerY = 1;
+        let isGameRunning = true;
         let keys = {};
         
         // Dog chase variables
@@ -27,7 +26,6 @@ let textureCache = new Map();
 let geometryCache = new Map();
 let materialCache = new Map();
 let powerUps = [];
-let isFlying = false;
 let flyTimeout = null;
 
 // Performance monitoring
@@ -170,40 +168,12 @@ let currentFPS = 60;
             directionalLight.shadow.camera.bottom = -50;
             scene.add(directionalLight);
             
-            createPlayer();
+            createPlayer(scene);
             createDog();
             createGround();
             setupEventListeners();
             
             animate();
-        }
-        
-        // Create player character using old.glb
-        let playerMixer; // Animation mixer for player
-        let isModelLoaded = false;
-        function createPlayer() {
-            const loader = new THREE.GLTFLoader();
-            loader.load('old.glb', function(gltf) {
-                player = gltf.scene;
-                player.position.set(0, playerY, 0);
-                player.scale.set(2.5, 2.5, 2.5);
-                player.traverse(function(child) {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
-                });
-                scene.add(player);
-                // Animation setup
-                if (gltf.animations && gltf.animations.length > 0) {
-                    playerMixer = new THREE.AnimationMixer(player);
-                    const action = playerMixer.clipAction(gltf.animations[0]);
-                    action.play();
-                }
-                isModelLoaded = true;
-            }, undefined, function(error) {
-                console.error('Error loading GLB:', error);
-            });
         }
         
         // Create dog character
@@ -395,6 +365,28 @@ function cleanupMemory() {
                     obstacle = trainGroup;
                     obstacle.height = 2.5;
                     break;
+                case 'slide_barrier':
+                    // Posts
+                    const postGeometry = new THREE.BoxGeometry(0.3, 4.5, 0.3);
+                    const postMaterial = new THREE.MeshLambertMaterial({ map: obstacleTexture });
+                    const leftPost = new THREE.Mesh(postGeometry, postMaterial);
+                    leftPost.position.set(-1, 2.25, 0);
+                    const rightPost = new THREE.Mesh(postGeometry, postMaterial);
+                    rightPost.position.set(1, 2.25, 0);
+                    // Bar
+                    const barGeometry = new THREE.BoxGeometry(2.2, 0.4, 0.3);
+                    const barMaterial = new THREE.MeshLambertMaterial({ map: obstacleTexture });
+                    const bar = new THREE.Mesh(barGeometry, barMaterial);
+                    bar.position.set(0, 3.2, 0);
+                    // Group
+                    const barrierGroup = new THREE.Group();
+                    barrierGroup.add(leftPost, rightPost, bar);
+                    barrierGroup.position.set(x, 0, z);
+                    barrierGroup.obstacleType = 'slide_barrier';
+                    barrierGroup.castShadow = true;
+                    barrierGroup.height = 3;
+                    obstacle = barrierGroup;
+                    break;
             }
             obstacle.castShadow = true;
             obstacle.obstacleType = type;
@@ -439,24 +431,24 @@ function cleanupMemory() {
                 switch (event.code) {
                     case 'ArrowLeft':
                         if (currentLane > -1) {
-                            currentLane--;
+                            decrementLane();
                         }
                         break;
                     case 'ArrowRight':
                         if (currentLane < 1) {
-                            currentLane++;
+                            incrementLane();
                         }
                         break;
                     case 'ArrowUp':
                         if (!isJumping) {
-                            isJumping = true;
-                            jumpVelocity = JUMP_FORCE;
+                            setIsJumping(true);
+                            setJumpVelocity(JUMP_FORCE);
                         }
                         break;
                     case 'ArrowDown':
                         if (!isJumping) {
-                            isSliding = true;
-                            setTimeout(() => { isSliding = false; }, 1000);
+                            setIsSliding(true);
+                            setTimeout(() => { setIsSliding(false); }, 1000);
                         }
                         break;
                 }
@@ -497,16 +489,15 @@ function cleanupMemory() {
             const deltaY = lastDragY - event.clientY; // Inverted for intuitive up movement
             if (isFlying) {
                 // While flying, drag up/down moves player up/down
-                playerY += deltaY * 0.03; // Adjust sensitivity as needed
-                playerY = Math.max(1, Math.min(10, playerY));
+                setPlayerY(Math.max(1, Math.min(10, getPlayerY() + deltaY * 0.03)));
                 lastDragY = event.clientY;
                 // Lane switching still works
                 if (Math.abs(deltaX) > 20) {
                     if (deltaX > 0 && currentLane < 1) {
-                        currentLane++;
+                        incrementLane();
                         lastDragX = event.clientX;
                     } else if (deltaX < 0 && currentLane > -1) {
-                        currentLane--;
+                        decrementLane();
                         lastDragX = event.clientX;
                     }
                 }
@@ -515,25 +506,25 @@ function cleanupMemory() {
             // Horizontal movement (lane switching)
             if (Math.abs(deltaX) > 20) {
                 if (deltaX > 0 && currentLane < 1) {
-                    currentLane++;
+                    incrementLane();
                     lastDragX = event.clientX;
                 } else if (deltaX < 0 && currentLane > -1) {
-                    currentLane--;
+                    decrementLane();
                     lastDragX = event.clientX;
                 }
             }
             
             // Vertical movement (jumping)
             if (deltaY > 50 && !isJumping) {
-                isJumping = true;
-                jumpVelocity = JUMP_FORCE;
+                setIsJumping(true);
+                setJumpVelocity(JUMP_FORCE);
                 lastDragY = event.clientY;
             }
             
             // Down movement (sliding)
             if (deltaY < -50 && !isJumping) {
-                isSliding = true;
-                setTimeout(() => { isSliding = false; }, 1000);
+                setIsSliding(true);
+                setTimeout(() => { setIsSliding(false); }, 1000);
                 lastDragY = event.clientY;
             }
         }
@@ -560,20 +551,23 @@ function cleanupMemory() {
             if (!isDragging || !isGameRunning) return;
             if (event.touches.length !== 1) return; // Only handle single finger
             const touch = event.touches[0];
-            const deltaX = touch.clientX - dragStartX;
-            const deltaY = dragStartY - touch.clientY; // Inverted for intuitive up movement
+            // Use total drag from drag start, not just last segment
+            const totalDeltaX = touch.clientX - dragStartX;
+            const totalDeltaY = dragStartY - touch.clientY; // Inverted for intuitive up movement
+            // Lower threshold for easier lane switching
+            const SWIPE_THRESHOLD = 15;
+            // Accept more diagonal swipes
+            const HORIZONTAL_RATIO = 0.5;
             if (isFlying) {
-                // While flying, drag up/down moves player up/down
-                playerY += deltaY * 0.03; // Adjust sensitivity as needed
-                playerY = Math.max(1, Math.min(10, playerY));
-                dragStartY = touch.clientY;
+                setPlayerY(Math.max(1, Math.min(10, getPlayerY() + (lastDragY - touch.clientY) * 0.03)));
+                lastDragY = touch.clientY;
                 // Lane switching still works
-                if (Math.abs(deltaX) > 30 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                    if (deltaX > 0 && currentLane < 1) {
-                        currentLane++;
-                        dragStartX = touch.clientX;
-                    } else if (deltaX < 0 && currentLane > -1) {
-                        currentLane--;
+                if (Math.abs(totalDeltaX) > SWIPE_THRESHOLD && Math.abs(totalDeltaX) > HORIZONTAL_RATIO * Math.abs(totalDeltaY)) {
+                    if (totalDeltaX > 0 && currentLane < 1) {
+                        incrementLane();
+                        dragStartX = touch.clientX; // Reset drag start for next swipe
+                    } else if (totalDeltaX < 0 && currentLane > -1) {
+                        decrementLane();
                         dragStartX = touch.clientX;
                     }
                 }
@@ -581,16 +575,26 @@ function cleanupMemory() {
                 lastDragY = touch.clientY;
                 return;
             }
+            // Horizontal movement (lane switching)
+            if (Math.abs(totalDeltaX) > SWIPE_THRESHOLD && Math.abs(totalDeltaX) > HORIZONTAL_RATIO * Math.abs(totalDeltaY)) {
+                if (totalDeltaX > 0 && currentLane < 1) {
+                    incrementLane();
+                    dragStartX = touch.clientX;
+                } else if (totalDeltaX < 0 && currentLane > -1) {
+                    decrementLane();
+                    dragStartX = touch.clientX;
+                }
+            }
             // Vertical movement (jumping)
-            else if (deltaY > 60 && Math.abs(deltaY) > Math.abs(deltaX) && !isJumping) {
-                isJumping = true;
-                jumpVelocity = JUMP_FORCE;
+            else if (totalDeltaY > 60 && Math.abs(totalDeltaY) > Math.abs(totalDeltaX) && !isJumping) {
+                setIsJumping(true);
+                setJumpVelocity(JUMP_FORCE);
                 dragStartY = touch.clientY;
             }
             // Down movement (sliding)
-            else if (deltaY < -60 && Math.abs(deltaY) > Math.abs(deltaX) && !isJumping) {
-                isSliding = true;
-                setTimeout(() => { isSliding = false; }, 1000);
+            else if (totalDeltaY < -60 && Math.abs(totalDeltaY) > Math.abs(totalDeltaX) && !isJumping) {
+                setIsSliding(true);
+                setTimeout(() => { setIsSliding(false); }, 1000);
                 dragStartY = touch.clientY;
             }
             lastDragX = touch.clientX;
@@ -607,60 +611,6 @@ function cleanupMemory() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-        
-        // Update player position and animation
-        function updatePlayer() {
-            if (!player) return; // Wait for model to load
-            // Fly power-up logic (must be first!)
-            if (isFlying) {
-                // Lane switching
-                const targetX = currentLane * LANE_WIDTH;
-                player.position.x += (targetX - player.position.x) * 0.15;
-                // Player can move up/down with up/down keys or touch
-                if (keys['ArrowUp']) {
-                    playerY += 0.4;
-                }
-                if (keys['ArrowDown']) {
-                    playerY -= 0.4;
-                }
-                playerY = Math.max(1, Math.min(10, playerY));
-                player.scale.y = 1;
-                isJumping = false;
-                isSliding = false;
-                player.position.y = playerY;
-                // Camera follow
-                camera.position.x = player.position.x;
-                camera.position.z = player.position.z + 8;
-                camera.lookAt(player.position.x, player.position.y + 2, player.position.z - 5);
-                return;
-            }
-            // Lane switching
-            const targetX = currentLane * LANE_WIDTH;
-            player.position.x += (targetX - player.position.x) * 0.15;
-            // Jumping
-            if (isJumping) {
-                playerY += jumpVelocity;
-                jumpVelocity -= GRAVITY;
-                if (playerY <= 1) {
-                    playerY = 1;
-                    isJumping = false;
-                    jumpVelocity = 0;
-                }
-            }
-            // Sliding
-            if (isSliding) {
-                playerY = SLIDE_HEIGHT;
-                player.scale.y = 0.5;
-            } else if (!isJumping) {
-                playerY = 1;
-                player.scale.y = 1;
-            }
-            player.position.y = playerY;
-            // Camera follow
-            camera.position.x = player.position.x;
-            camera.position.z = player.position.z + 8;
-            camera.lookAt(player.position.x, player.position.y + 2, player.position.z - 5);
         }
         
         // Update dog position and behavior
@@ -737,7 +687,7 @@ function cleanupMemory() {
             // Spawn new obstacles and coins
             if (Math.random() < 0.02) {
                 const lane = Math.floor(Math.random() * 3) - 1;
-                const types = ['barrier', 'low', 'train'];
+                const types = ['barrier', 'low', 'train', 'slide_barrier'];
                 const type = types[Math.floor(Math.random() * types.length)];
                 createObstacle(type, lane, -100 - Math.random() * 50);
             }
@@ -830,16 +780,24 @@ function cleanupMemory() {
             // Check obstacle collisions
             obstacles.forEach(obstacle => {
                 const obstacleBox = new THREE.Box3().setFromObject(obstacle);
-                
+                // Fix: Only trigger game over for slide_barrier if player is NOT sliding, otherwise ignore collision
                 if (playerBox.intersectsBox(obstacleBox)) {
-                    // Check if player can avoid collision
                     if (obstacle.obstacleType === 'low' && isJumping && playerY > 2) {
                         return; // Jumped over low obstacle
                     }
                     if (obstacle.obstacleType === 'barrier' && isSliding) {
                         return; // Slid under barrier
                     }
-                    
+                    if (obstacle.obstacleType === 'slide_barrier') {
+                        if (isSliding) {
+                            // Player is sliding, ignore collision
+                            return;
+                        } else {
+                            // Not sliding, game over
+                            gameOver('obstacle');
+                            return;
+                        }
+                    }
                     // Handle different collision types
                     if (obstacle.obstacleType === 'low') {
                         // Small obstacle hit - don't end game, but trigger dog chase
@@ -964,11 +922,11 @@ function cleanupMemory() {
         function restartGame() {
             // Reset game state
             isGameRunning = true;
-            isJumping = false;
-            isSliding = false;
-            currentLane = 0;
-            jumpVelocity = 0;
-            playerY = 1;
+            setIsJumping(false);
+            setIsSliding(false);
+            setCurrentLane(0);
+            setJumpVelocity(0);
+            setPlayerY(1);
             score = 0;
             coinsCollected = 0;
             gameSpeed = 0.2;
@@ -1025,6 +983,7 @@ function cleanupMemory() {
             powerUps = [];
             isFlying = false;
             if (flyTimeout) clearTimeout(flyTimeout);
+            resetPlayerState();
         }
         
         // Add background music
@@ -1045,7 +1004,7 @@ function cleanupMemory() {
         function animate() {
             requestAnimationFrame(animate);
             if (isGameRunning && isModelLoaded) {
-                updatePlayer();
+                updatePlayer(keys, camera, isFlying);
                 updateDog();
                 updateWorld();
                 checkCollisions();
@@ -1065,27 +1024,4 @@ function cleanupMemory() {
         // Play music after user interaction
         document.addEventListener('click', playBackgroundMusic, { once: true });
         document.addEventListener('keydown', playBackgroundMusic, { once: true });
-
-        // Fly power-up logic
-        function activateFlyPowerUp() {
-            isFlying = true;
-            if (flyTimeout) clearTimeout(flyTimeout);
-            // Visual feedback: make player glow
-            player.traverse(child => {
-                if (child.isMesh) {
-                    child.material.emissive = new THREE.Color(0x00ffff);
-                    child.material.emissiveIntensity = 0.7;
-                }
-            });
-            flyTimeout = setTimeout(() => {
-                isFlying = false;
-                // Remove glow
-                player.traverse(child => {
-                    if (child.isMesh) {
-                        child.material.emissive = new THREE.Color(0x000000);
-                        child.material.emissiveIntensity = 0;
-                    }
-                });
-            }, 5000); // 5 seconds
-        }
 

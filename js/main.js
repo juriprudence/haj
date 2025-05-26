@@ -467,7 +467,7 @@ function cleanupMemory() {
             // Touch controls
             renderer.domElement.addEventListener('touchstart', handleTouchStart, { passive: false });
             renderer.domElement.addEventListener('touchmove', handleTouchMove, { passive: false });
-            renderer.domElement.addEventListener('touchend', handleTouchEnd);
+            renderer.domElement.addEventListener('touchend', handleTouchEnd, { passive: false });
             
             window.addEventListener('resize', onWindowResize);
         }

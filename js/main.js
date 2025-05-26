@@ -168,12 +168,18 @@ let currentFPS = 60;
             directionalLight.shadow.camera.bottom = -50;
             scene.add(directionalLight);
             
-            createPlayer(scene);
+            createPlayer(scene, hideLoadingOverlay); // Pass hideLoadingOverlay as callback
             createDog();
             createGround();
             setupEventListeners();
             
             animate();
+        }
+        
+        // Hide loading overlay when player model is loaded
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) overlay.style.display = 'none';
         }
         
         // Create dog character

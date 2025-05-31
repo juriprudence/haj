@@ -7,8 +7,7 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div id="loading-overlay" style="position:fixed;top:0;left:0;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:#111c;color:#fff;z-index:9999;font-size:2em;">Loading...</div>
-    <div id="gameContainer">
+     <div id="gameContainer">
         <div id="ui">
             <div>النقاط: <span id="score">0</span></div>
             <div>العملات: <span id="coins">0</span></div>
@@ -22,8 +21,8 @@
         
         <div id="gameOver">
             <h2 id="gameOverTitle">انتهت اللعبة!</h2>
-            <p>النقاط النهائية: <span id="finalScore">0</span></p>
-            <p>عدد العملات: <span id="finalCoins">0</span></p>
+            <p>النقاط النهائية: <span id="finalScore"></span></p>
+            <p>عدد العملات: <span id="finalCoins"></span></p>
             <p id="gameOverReason"></p>
             <button onclick="restartGame()">إلعب مجددا</button>
         </div>

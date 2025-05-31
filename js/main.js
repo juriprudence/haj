@@ -209,11 +209,11 @@ let currentFPS = 60;
                 scene.add(dog);
                 
                 // Animation setup
-                if (gltf.animations && gltf.animations.length > 0) {
-                    dogMixer = new THREE.AnimationMixer(dog);
-                    const action = dogMixer.clipAction(gltf.animations[0]);
-                    action.play();
-                }
+               // if (gltf.animations && gltf.animations.length > 0) {
+                  //  dogMixer = new THREE.AnimationMixer(dog);
+                   // const action = dogMixer.clipAction(gltf.animations[0]);
+                    //action.play();
+                //}
             }, undefined, function(error) {
                 console.log('Dog model not found, using simple geometry');
                 // Create a simple dog using basic geometries as fallback
@@ -547,8 +547,17 @@ let currentFPS = 60;
                             obstacles.splice(index, 1);
                         }
                     } else {
-                        // Large obstacle hit - end game immediately
-                        gameOver('obstacle');
+                        // Large obstacle hit - dog attacks, then game over
+                        if (dog && player) {
+                            dog.position.set(player.position.x, player.position.y, player.position.z + 1.5); // In front of player
+                            if (dog.lookAt) dog.lookAt(player.position);
+                        }
+                        // Do NOT show dog warning UI
+                        isGameRunning = false;
+                        setGameRunning(false);
+                        setTimeout(() => {
+                            gameOver('obstacle'); // or use a custom reason if you want
+                        }, 700);
                     }
                 }
             });

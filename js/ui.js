@@ -50,12 +50,22 @@ export function initUI() {
     startMenu.style.display = 'none';
     startMenu.innerHTML = `
         <video id="startMenuVideo" src="start.mp4" autoplay loop muted playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0;"></video>
+        <video id="transitionVideo" src="transition.mp4" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; display: none;"></video>
         <div id="startMenuContent" style="position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; width: 100%;">
             <h2 style="color: white; text-shadow: 2px 2px 8px #000;">Start Game</h2>
-            <button onclick="window.startGame()">Start</button>
+            <button id="startButton">Start</button>
         </div>
     `;
     document.body.appendChild(startMenu);
+
+    // Start playing the start menu video
+    const startMenuVideo = document.getElementById('startMenuVideo');
+    startMenuVideo.play().catch(() => {
+        // If autoplay fails, try to play on first user interaction
+        document.addEventListener('click', () => {
+            startMenuVideo.play();
+        }, { once: true });
+    });
 
     // Add CSS
     const style = document.createElement('style');
@@ -185,6 +195,9 @@ export function initUI() {
         }
     `;
     document.head.appendChild(style);
+
+    // Add event listener to start button
+    document.getElementById('startButton').addEventListener('click', handleStartGame);
 }
 
 // Update score display
@@ -287,4 +300,27 @@ export function showStartMenu() {
 // Hide start menu
 export function hideStartMenu() {
     document.getElementById('startMenu').style.display = 'none';
+}
+
+// Change the function to be a regular function instead of export
+function handleStartGame() {
+    const startMenu = document.getElementById('startMenu');
+    const startMenuContent = document.getElementById('startMenuContent');
+    const startMenuVideo = document.getElementById('startMenuVideo');
+    const transitionVideo = document.getElementById('transitionVideo');
+    
+    // Hide the start menu content
+    startMenuContent.style.display = 'none';
+    
+    // Hide start menu video and show transition video
+    startMenuVideo.style.display = 'none';
+    transitionVideo.style.display = 'block';
+    transitionVideo.currentTime = 0;
+    transitionVideo.play();
+    
+    // After 3 seconds, hide the menu and start the game
+    setTimeout(() => {
+        startMenu.style.display = 'none';
+        window.startGame();
+    }, 5000);
 } 

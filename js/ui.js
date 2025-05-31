@@ -49,8 +49,11 @@ export function initUI() {
     startMenu.id = 'startMenu';
     startMenu.style.display = 'none';
     startMenu.innerHTML = `
-        <h2>Start Game</h2>
-        <button onclick="window.startGame()">Start</button>
+        <video id="startMenuVideo" src="start.mp4" autoplay loop muted playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0;"></video>
+        <div id="startMenuContent" style="position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; width: 100%;">
+            <h2 style="color: white; text-shadow: 2px 2px 8px #000;">Start Game</h2>
+            <button onclick="window.startGame()">Start</button>
+        </div>
     `;
     document.body.appendChild(startMenu);
 
@@ -63,7 +66,7 @@ export function initUI() {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: url('load.jpeg') center center / cover no-repeat, rgba(0, 0, 0, 0.8);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -133,15 +136,19 @@ export function initUI() {
         }
         #startMenu {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
             color: white;
-            padding: 40px;
-            border-radius: 20px;
+            border-radius: 0;
             text-align: center;
             z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
         }
         #startMenu button {
             background: #3498db;
@@ -152,9 +159,29 @@ export function initUI() {
             border-radius: 10px;
             cursor: pointer;
             margin-top: 20px;
+            z-index: 2;
         }
         #startMenu button:hover {
             background: #2980b9;
+        }
+        #startMenuVideo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: 0;
+        }
+        #startMenuContent {
+            position: relative;
+            z-index: 1;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
     `;
     document.head.appendChild(style);

@@ -6,16 +6,21 @@ export let player, playerY = 1, isJumping = false, isSliding = false, jumpVeloci
 export let isFlying = false, flyTimeout = null;
 export let playerMixer, isModelLoaded = false;
 
+// Animation variables
+let idleAction, jumpAction;
+let currentAction = null;
+let jumpAnimationFinishedListener = null; // Track the listener
+
 // Input state
 let isDragging = false, dragStartX = 0, dragStartY = 0;
 let lastDragX = 0, lastDragY = 0;
 let keys = {};
-let isGameRunning = false; // Add local game running state
+let isGameRunning = false;
 
 // Player creation (GLB loader)
 export function createPlayer(scene, onLoaded) {
     const loader = new THREE.GLTFLoader();
-    loader.load('old.glb', function(gltf) {
+    loader.load('tow.glb', function(gltf) {
         player = gltf.scene;
         player.position.set(0, playerY, 0);
         player.scale.set(2.5, 2.5, 2.5);
@@ -26,12 +31,26 @@ export function createPlayer(scene, onLoaded) {
             }
         });
         scene.add(player);
+        
         // Animation setup
         if (gltf.animations && gltf.animations.length > 0) {
             playerMixer = new THREE.AnimationMixer(player);
-            const action = playerMixer.clipAction(gltf.animations[0]);
-            action.play();
+            
+            // Set up idle animation (first animation)
+            if (gltf.animations[0]) {
+                idleAction = playerMixer.clipAction(gltf.animations[0]);
+                idleAction.play();
+                currentAction = idleAction;
+            }
+            
+            // Set up jump animation (second animation)
+            if (gltf.animations[1]) {
+                jumpAction = playerMixer.clipAction(gltf.animations[1]);
+                jumpAction.setLoop(THREE.LoopOnce);
+                jumpAction.clampWhenFinished = true;
+            }
         }
+        
         isModelLoaded = true;
         if (onLoaded) onLoaded();
     }, undefined, function(error) {
@@ -39,9 +58,84 @@ export function createPlayer(scene, onLoaded) {
     });
 }
 
+// Function to switch to jump animation
+function playJumpAnimation() {
+    if (!playerMixer || !jumpAction || !idleAction) return;
+    
+    // Remove any existing event listener first
+    if (jumpAnimationFinishedListener) {
+        playerMixer.removeEventListener('finished', jumpAnimationFinishedListener);
+        jumpAnimationFinishedListener = null;
+    }
+    
+    // Fade out current animation and fade in jump animation
+    if (currentAction && currentAction !== jumpAction) {
+        currentAction.fadeOut(0.1);
+    }
+    
+    jumpAction.reset();
+    jumpAction.fadeIn(0.1);
+    jumpAction.play();
+    currentAction = jumpAction;
+    
+    // Create new event listener
+    jumpAnimationFinishedListener = (event) => {
+        if (event.action === jumpAction) {
+            playerMixer.removeEventListener('finished', jumpAnimationFinishedListener);
+            jumpAnimationFinishedListener = null;
+            // Force return to idle animation regardless of jump state
+            forceIdleAnimation();
+        }
+    };
+    
+    // Listen for when jump animation finishes
+    playerMixer.addEventListener('finished', jumpAnimationFinishedListener);
+    
+    // Backup timer in case the event doesn't fire
+    setTimeout(() => {
+        if (jumpAnimationFinishedListener) {
+            playerMixer.removeEventListener('finished', jumpAnimationFinishedListener);
+            jumpAnimationFinishedListener = null;
+            forceIdleAnimation();
+        }
+    }, 1000); // 1 second backup timer
+}
+
+// Function to switch back to idle animation
+function playIdleAnimation() {
+    if (!playerMixer || !idleAction || !jumpAction) return;
+    
+    // Only switch back if we're not currently playing jump animation
+    if (currentAction !== jumpAction) {
+        forceIdleAnimation();
+    }
+}
+
+// Force idle animation (used as backup)
+function forceIdleAnimation() {
+    if (!playerMixer || !idleAction) return;
+    
+    if (currentAction && currentAction !== idleAction) {
+        currentAction.fadeOut(0.2);
+    }
+    
+    idleAction.reset();
+    idleAction.fadeIn(0.2);
+    idleAction.play();
+    currentAction = idleAction;
+}
+
 // Player update logic
 export function updatePlayer(keys, camera, isFlyingFlag) {
     if (!player) return;
+    
+    // Update animation mixer with delta time
+    if (playerMixer) {
+        // Use dynamic delta time instead of fixed
+        const delta = Math.min(0.05, 0.016); // Cap at 50ms to prevent large jumps
+        playerMixer.update(delta);
+    }
+    
     if (isFlyingFlag) {
         // Lane switching
         const targetX = currentLane * LANE_WIDTH;
@@ -55,7 +149,14 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
         }
         playerY = Math.max(1, Math.min(10, playerY));
         player.scale.y = 1;
-        isJumping = false;
+        
+        // Force reset jump state when flying
+        if (isJumping) {
+            isJumping = false;
+            jumpVelocity = 0;
+            forceIdleAnimation();
+        }
+        
         isSliding = false;
         player.position.y = playerY;
         // Camera follow
@@ -64,37 +165,63 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
         camera.lookAt(player.position.x, player.position.y + 2, player.position.z - 5);
         return;
     }
+    
     // Lane switching
     const targetX = currentLane * LANE_WIDTH;
     player.position.x += (targetX - player.position.x) * 0.15;
-    // Jumping
+    
+    // Jumping with better state management
     if (isJumping) {
         playerY += jumpVelocity;
         jumpVelocity -= GRAVITY;
+        
+        // Landing logic with safety checks
         if (playerY <= 1) {
             playerY = 1;
             isJumping = false;
             jumpVelocity = 0;
+            
+            // Ensure we return to idle animation
+            setTimeout(() => {
+                if (!isJumping) { // Double check we're still not jumping
+                    forceIdleAnimation();
+                }
+            }, 100);
         }
     }
+    
     // Sliding
     if (isSliding) {
         playerY = SLIDE_HEIGHT;
         player.scale.y = 0.5;
     } else if (!isJumping) {
-        playerY = 1;
+        if (playerY < 1) playerY = 1; // Safety check
         player.scale.y = 1;
     }
+    
     player.position.y = playerY;
+    
     // Camera follow
     camera.position.x = player.position.x;
     camera.position.z = player.position.z + 8;
     camera.lookAt(player.position.x, player.position.y + 2, player.position.z - 5);
 }
 
+// Modified jump function with better state management
+function triggerJump() {
+    if (!isJumping && !isSliding) { // Can't jump while sliding
+        setIsJumping(true);
+        setJumpVelocity(JUMP_FORCE);
+        playJumpAnimation();
+        
+        // Debug log
+        console.log('Jump triggered - isJumping:', isJumping, 'jumpVelocity:', jumpVelocity);
+    }
+}
+
 // Input handling
 export function setupInputHandlers(renderer, gameRunning) {
-    isGameRunning = gameRunning; // Set initial state
+    isGameRunning = gameRunning;
     
     // Keyboard controls
     document.addEventListener('keydown', (event) => {
@@ -114,16 +241,17 @@ export function setupInputHandlers(renderer, gameRunning) {
                 }
                 break;
             case 'ArrowUp':
-                if (!isJumping) {
-                    setIsJumping(true);
-                    setJumpVelocity(JUMP_FORCE);
-                }
+                triggerJump();
                 break;
             case 'ArrowDown':
                 if (!isJumping) {
                     setIsSliding(true);
                     setTimeout(() => { setIsSliding(false); }, 1000);
                 }
+                break;
+            case 'KeyR': // Add R key to force reset player state (debug)
+                console.log('Force reset player state');
+                resetPlayerState();
                 break;
         }
     });
@@ -144,7 +272,7 @@ export function setupInputHandlers(renderer, gameRunning) {
     renderer.domElement.addEventListener('touchend', handleTouchEnd, { passive: false });
 }
 
-// Mouse/touch handlers
+// Mouse/touch handlers (keeping existing logic but adding debug)
 function handleDragStart(event) {
     if (!isGameRunning) return;
     
@@ -158,12 +286,11 @@ function handleDragStart(event) {
 function handleDragMove(event) {
     if (!isDragging || !isGameRunning) return;
     const deltaX = event.clientX - lastDragX;
-    const deltaY = lastDragY - event.clientY; // Inverted for intuitive up movement
+    const deltaY = lastDragY - event.clientY;
+    
     if (isFlying) {
-        // While flying, drag up/down moves player up/down
         setPlayerY(Math.max(1, Math.min(10, getPlayerY() + deltaY * 0.03)));
         lastDragY = event.clientY;
-        // Lane switching still works
         if (Math.abs(deltaX) > 20) {
             if (deltaX > 0 && currentLane < 1) {
                 incrementLane();
@@ -175,6 +302,7 @@ function handleDragMove(event) {
         }
         return;
     }
+    
     // Horizontal movement (lane switching)
     if (Math.abs(deltaX) > 20) {
         if (deltaX > 0 && currentLane < 1) {
@@ -188,8 +316,7 @@ function handleDragMove(event) {
     
     // Vertical movement (jumping)
     if (deltaY > 50 && !isJumping) {
-        setIsJumping(true);
-        setJumpVelocity(JUMP_FORCE);
+        triggerJump();
         lastDragY = event.clientY;
     }
     
@@ -220,23 +347,21 @@ function handleTouchStart(event) {
 function handleTouchMove(event) {
     event.preventDefault();
     if (!isDragging || !isGameRunning) return;
-    if (event.touches.length !== 1) return; // Only handle single finger
+    if (event.touches.length !== 1) return;
+    
     const touch = event.touches[0];
-    // Use total drag from drag start, not just last segment
     const totalDeltaX = touch.clientX - dragStartX;
-    const totalDeltaY = dragStartY - touch.clientY; // Inverted for intuitive up movement
-    // Lower threshold for easier lane switching
+    const totalDeltaY = dragStartY - touch.clientY;
     const SWIPE_THRESHOLD = 15;
-    // Accept more diagonal swipes
     const HORIZONTAL_RATIO = 0.5;
+    
     if (isFlying) {
         setPlayerY(Math.max(1, Math.min(10, getPlayerY() + (lastDragY - touch.clientY) * 0.03)));
         lastDragY = touch.clientY;
-        // Lane switching still works
         if (Math.abs(totalDeltaX) > SWIPE_THRESHOLD && Math.abs(totalDeltaX) > HORIZONTAL_RATIO * Math.abs(totalDeltaY)) {
             if (totalDeltaX > 0 && currentLane < 1) {
                 incrementLane();
-                dragStartX = touch.clientX; // Reset drag start for next swipe
+                dragStartX = touch.clientX;
             } else if (totalDeltaX < 0 && currentLane > -1) {
                 decrementLane();
                 dragStartX = touch.clientX;
@@ -246,6 +371,7 @@ function handleTouchMove(event) {
         lastDragY = touch.clientY;
         return;
     }
+    
     // Horizontal movement (lane switching)
     if (Math.abs(totalDeltaX) > SWIPE_THRESHOLD && Math.abs(totalDeltaX) > HORIZONTAL_RATIO * Math.abs(totalDeltaY)) {
         if (totalDeltaX > 0 && currentLane < 1) {
@@ -258,8 +384,7 @@ function handleTouchMove(event) {
     }
     // Vertical movement (jumping)
     else if (totalDeltaY > 60 && Math.abs(totalDeltaY) > Math.abs(totalDeltaX) && !isJumping) {
-        setIsJumping(true);
-        setJumpVelocity(JUMP_FORCE);
+        triggerJump();
         dragStartY = touch.clientY;
     }
     // Down movement (sliding)
@@ -268,6 +393,7 @@ function handleTouchMove(event) {
         setTimeout(() => { setIsSliding(false); }, 1000);
         dragStartY = touch.clientY;
     }
+    
     lastDragX = touch.clientX;
     lastDragY = touch.clientY;
 }
@@ -277,19 +403,40 @@ function handleTouchEnd(event) {
     isDragging = false;
 }
 
-// Utility to reset player state (for restart)
+// Utility to reset player state (enhanced with better cleanup)
 export function resetPlayerState() {
+    console.log('Resetting player state');
+    
+    // Clear animation listeners
+    if (jumpAnimationFinishedListener && playerMixer) {
+        playerMixer.removeEventListener('finished', jumpAnimationFinishedListener);
+        jumpAnimationFinishedListener = null;
+    }
+    
+    // Reset all state variables
     isJumping = false;
     isSliding = false;
     currentLane = 0;
     jumpVelocity = 0;
     playerY = 1;
     isFlying = false;
-    if (flyTimeout) clearTimeout(flyTimeout);
+    
+    if (flyTimeout) {
+        clearTimeout(flyTimeout);
+        flyTimeout = null;
+    }
+    
     if (player) {
         player.position.set(0, 1, 0);
         player.scale.set(2.5, 2.5, 2.5);
     }
+    
+    // Force idle animation
+    if (playerMixer && idleAction) {
+        forceIdleAnimation();
+    }
+    
+    console.log('Player state reset complete');
 }
 
 // Lane setters and modifiers
@@ -298,8 +445,11 @@ export function getCurrentLane() { return currentLane; }
 export function incrementLane() { if (currentLane < 1) currentLane++; }
 export function decrementLane() { if (currentLane > -1) currentLane--; }
 
-// Jumping/sliding setters
-export function setIsJumping(val) { isJumping = val; }
+// Jumping/sliding setters with debug logging
+export function setIsJumping(val) { 
+    console.log('Setting isJumping to:', val);
+    isJumping = val; 
+}
 export function setIsSliding(val) { isSliding = val; }
 export function setJumpVelocity(val) { jumpVelocity = val; }
 export function setPlayerY(val) { playerY = val; }
@@ -311,13 +461,34 @@ export function getPlayerY() { return playerY; }
 // Fly power-up
 export function activateFlyPowerUp() {
     isFlying = true;
+    // Reset jump state when flying
+    if (isJumping) {
+        isJumping = false;
+        jumpVelocity = 0;
+        forceIdleAnimation();
+    }
+    
     if (flyTimeout) clearTimeout(flyTimeout);
     flyTimeout = setTimeout(() => {
         isFlying = false;
-    }, 5000); // 5 seconds of flying
+    }, 5000);
 }
 
 // Add function to update game running state
 export function setGameRunning(running) {
     isGameRunning = running;
-} 
+}
+
+// Debug function to check player state
+export function debugPlayerState() {
+    console.log('Player Debug State:', {
+        isJumping,
+        isSliding,
+        jumpVelocity,
+        playerY,
+        currentLane,
+        isFlying,
+        currentAction: currentAction ? currentAction._clip.name : 'none',
+        hasJumpListener: !!jumpAnimationFinishedListener
+    });
+}

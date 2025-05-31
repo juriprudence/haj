@@ -18,6 +18,7 @@ import {
     createObstacle, createCoin, createPowerUp, createParticleEffect,
     updateParticles, disposeObject
 } from './interactables.js';
+import { createGround, updateGround, disposeGround } from './ground.js';
         
         // Game variables
         let scene, camera, renderer, ground = [];
@@ -42,6 +43,11 @@ let maxCoins = 8;
 let maxParticles = 16;
 let powerUps = [];
 let flyTimeout = null;
+
+// Caches for performance optimization
+const geometryCache = new Map();
+const materialCache = new Map();
+const textureCache = new Map();
 
 // Asset loading tracker
 let assetsLoaded = 0;
@@ -139,8 +145,12 @@ function monitorPerformance() {
 }
 let lastFPSCheck = 0;
 let currentFPS = 60;
+        
         // Initialize the game
         function init() {
+            // Detect device capabilities first
+            detectDeviceCapabilities();
+            
             // Initialize UI
             initUI();
             initBackgroundMusic();
@@ -187,7 +197,7 @@ let currentFPS = 60;
             
             createPlayer(scene, assetLoaded);
             createDog();
-            createGround(assetLoaded);
+            createGround(scene, ground, NUM_FLOOR_TILES, assetLoaded);
             setupInputHandlers(renderer, isGameRunning);
             
             animate();
@@ -208,92 +218,19 @@ let currentFPS = 60;
                 });
                 scene.add(dog);
                 
-                // Animation setup
-               // if (gltf.animations && gltf.animations.length > 0) {
-                  //  dogMixer = new THREE.AnimationMixer(dog);
-                   // const action = dogMixer.clipAction(gltf.animations[0]);
-                    //action.play();
-                //}
-            }, undefined, function(error) {
-                console.log('Dog model not found, using simple geometry');
-                // Create a simple dog using basic geometries as fallback
-            const dogGroup = new THREE.Group();
-            
-            // Dog body
-            const bodyGeometry = new THREE.BoxGeometry(2, 1, 3);
-            const dogMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-            const body = new THREE.Mesh(bodyGeometry, dogMaterial);
-            body.position.y = 0.5;
-            body.castShadow = true;
-            dogGroup.add(body);
-            
-            // Dog head
-            const headGeometry = new THREE.SphereGeometry(0.8, 16, 16);
-            const head = new THREE.Mesh(headGeometry, dogMaterial);
-            head.position.set(0, 1.2, 1.2);
-            head.castShadow = true;
-            dogGroup.add(head);
-            
-            // Dog ears
-            const earGeometry = new THREE.ConeGeometry(0.3, 0.8, 8);
-            const leftEar = new THREE.Mesh(earGeometry, dogMaterial);
-            leftEar.position.set(-0.4, 1.8, 1.2);
-            leftEar.rotation.z = 0.3;
-            dogGroup.add(leftEar);
-            
-            const rightEar = new THREE.Mesh(earGeometry, dogMaterial);
-            rightEar.position.set(0.4, 1.8, 1.2);
-            rightEar.rotation.z = -0.3;
-            dogGroup.add(rightEar);
-            
-            // Dog legs
-            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1);
-            const legPositions = [
-                [-0.7, -0.5, 1], [0.7, -0.5, 1],
-                [-0.7, -0.5, -1], [0.7, -0.5, -1]
-            ];
-            
-            legPositions.forEach(pos => {
-                const leg = new THREE.Mesh(legGeometry, dogMaterial);
-                leg.position.set(pos[0], pos[1], pos[2]);
-                leg.castShadow = true;
-                dogGroup.add(leg);
-            });
-            
-            // Dog tail
-            const tailGeometry = new THREE.CylinderGeometry(0.1, 0.2, 1.5);
-            const tail = new THREE.Mesh(tailGeometry, dogMaterial);
-            tail.position.set(0, 1, -2);
-            tail.rotation.x = -0.5;
-            dogGroup.add(tail);
-            
-            // Dog eyes
-            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-            const eyeMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            leftEye.position.set(-0.3, 1.3, 1.8);
-            dogGroup.add(leftEye);
-            
-            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            rightEye.position.set(0.3, 1.3, 1.8);
-            dogGroup.add(rightEye);
-            
-            dog = dogGroup;
-            dog.position.set(0, 0, dogPosition);
-            dog.scale.set(1.5, 1.5, 1.5);
-            scene.add(dog);
+                // Animation setup (uncomment if you want to use dog animations)
+                // if (gltf.animations && gltf.animations.length > 0) {
+                //     dogMixer = new THREE.AnimationMixer(dog);
+                //     const action = dogMixer.clipAction(gltf.animations[0]);
+                //     action.play();
+                // }
             });
         }
         
         // Update world
         function updateWorld() {
-            // Move ground
-            ground.forEach(segment => {
-                segment.position.z += gameSpeed;
-                if (segment.position.z > 20) {
-                    segment.position.z -= 200;
-                }
-            });
+            // Use the improved ground update function
+            updateGround(ground, gameSpeed);
             
             // Move and remove obstacles
             for (let i = obstacles.length - 1; i >= 0; i--) {
@@ -596,7 +533,6 @@ let currentFPS = 60;
             requestAnimationFrame(animate);
             if (isModelLoaded) {
                 updatePlayer(keys, camera, isFlying);
-                updateDog();
                 if (isGameRunning) {
                     updateWorld();
                     checkCollisions();
@@ -638,60 +574,3 @@ let currentFPS = 60;
     // Play music after user interaction
     document.addEventListener('click', playBackgroundMusic, { once: true });
     document.addEventListener('keydown', playBackgroundMusic, { once: true });
-
-// Create ground
-function createGround(onTileLoaded) {
-    const loader = new THREE.GLTFLoader();
-    const TILE_LENGTH = 40; // Adjust based on your floor.glb size
-    for (let i = 0; i < NUM_FLOOR_TILES; i++) {
-        loader.load('floor.glb', function(gltf) {
-            const floorTile = gltf.scene;
-            floorTile.position.set(0, 22, -i * TILE_LENGTH);
-            floorTile.scale.set(40, 80, 80); // Taller floor (Y=40)
-            floorTile.rotation.y = Math.PI / 2; // Rotate 90 degrees
-            floorTile.traverse(function(child) {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                    // Make the floor whiter
-                    if (child.material) {
-                        child.material.color.set(0xffffff); // Pure white
-                        child.material.needsUpdate = true;
-                    }
-                }
-            });
-            scene.add(floorTile);
-            ground.push(floorTile);
-            if (onTileLoaded) onTileLoaded();
-        });
-    }
-}
-
-// Update dog position and behavior
-function updateDog() {
-    if (!dog) return;
-    
-    // Dog follows player's lane slowly
-    const targetX = currentLane * LANE_WIDTH;
-    dog.position.x += (targetX - dog.position.x) * 0.05;
-    
-    // If dog is chasing, move it closer to player
-    if (isDogChasing && dogPosition > DOG_CATCH_DISTANCE) {
-        dogPosition -= dogSpeed;
-        dog.position.z = dogPosition;
-        
-        // Update dog warning UI
-        updateDogWarning(dogPosition, true);
-        
-        // Make dog run animation (simple up-down movement)
-        dog.position.y = Math.sin(Date.now() * 0.01) * 0.2;
-        
-        // Check if dog caught the player
-        if (dogPosition <= DOG_CATCH_DISTANCE) {
-            gameOver('dog');
-        }
-    } else {
-        updateDogWarning(0, false);
-    }
-}
-

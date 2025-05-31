@@ -19,6 +19,9 @@ import {
     updateParticles, disposeObject
 } from './interactables.js';
 import { createGround, updateGround, disposeGround } from './ground.js';
+import { 
+    initSounds, playBackgroundMusic as playBGMusic, stopBackgroundMusic as stopBGMusic, playJumpSound, playDogBark, playChickenSound
+} from './sound.js';
         
         // Game variables
         let scene, camera, renderer, ground = [];
@@ -149,10 +152,9 @@ let currentFPS = 60;
         function init() {
             // Detect device capabilities first
             detectDeviceCapabilities();
-            
             // Initialize UI
             initUI();
-            initBackgroundMusic();
+            initSounds();
             
             // Create scene
             scene = new THREE.Scene();
@@ -347,7 +349,10 @@ let currentFPS = 60;
             isGameRunning = false;
             setGameRunning(false);
             showGameOver(score, coinsCollected, reason, smallObstacleHits);
-            stopBackgroundMusic();
+            if (reason === 'dog') {
+                playDogBark();
+            }
+            stopBGMusic();
         }
         
         // Restart game
@@ -403,7 +408,7 @@ let currentFPS = 60;
             updateDogWarning(0, false);
             
             // Resume background music if user already interacted
-            playBackgroundMusic();
+            playBGMusic();
             
             // Reset power-ups and fly state
             powerUps.forEach(p => scene.remove(p));
@@ -484,6 +489,8 @@ let currentFPS = 60;
                         // Large obstacle hit - dog attacks, then game over
                         if (dog && player) {
                             dog.position.set(player.position.x, player.position.y, player.position.z + 1.5); // In front of player
+                            playDogBark();
+                            
                             if (dog.lookAt) dog.lookAt(player.position);
                         }
                         // Do NOT show dog warning UI
@@ -510,6 +517,7 @@ let currentFPS = 60;
                     // Coin collect effect with scene parameter
                     const newParticles = createParticleEffect(coin.position, scene);
                     particles.push(...newParticles);
+                    playChickenSound(); // Play chicken sound for 1 second
                 }
             }
             
@@ -569,5 +577,5 @@ let currentFPS = 60;
         });
         
     // Play music after user interaction
-    document.addEventListener('click', playBackgroundMusic, { once: true });
-    document.addEventListener('keydown', playBackgroundMusic, { once: true });
+    document.addEventListener('click', playBGMusic, { once: true });
+    document.addEventListener('keydown', playBGMusic, { once: true });

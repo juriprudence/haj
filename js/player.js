@@ -1,5 +1,6 @@
 // Player-related variables and logic
 import { LANE_WIDTH, JUMP_FORCE, GRAVITY, SLIDE_HEIGHT } from './config.js';
+import { playJumpSound } from './sound.js';
 
 // Player state variables
 export let player, playerY = 1, isJumping = false, isSliding = false, jumpVelocity = 0, currentLane = 0;
@@ -180,7 +181,8 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
 
 // Modified jump function with better state management
 function triggerJump() {
-    if (!isJumping && !isSliding) { // Can't jump while sliding
+    // Prevent jumping while flying or sliding
+    if (!isJumping && !isSliding) {
         setIsJumping(true);
         // If jump boost is active, increase jump velocity
         if (hasJumpBoost) {
@@ -189,7 +191,7 @@ function triggerJump() {
             setJumpVelocity(JUMP_FORCE);
         }
         playJumpAnimation();
-        
+        playJumpSound();
         // Debug log
         console.log('Jump triggered - isJumping:', isJumping, 'jumpVelocity:', jumpVelocity, 'hasJumpBoost:', hasJumpBoost);
     }

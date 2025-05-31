@@ -3,7 +3,8 @@ import { LANE_WIDTH, JUMP_FORCE, GRAVITY, SLIDE_HEIGHT } from './config.js';
 
 // Player state variables
 export let player, playerY = 1, isJumping = false, isSliding = false, jumpVelocity = 0, currentLane = 0;
-export let isFlying = false, flyTimeout = null;
+export let hasJumpBoost = false;
+let jumpBoostTimeout = null;
 export let playerMixer, isModelLoaded = false;
 
 // Animation variables
@@ -136,36 +137,6 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
         playerMixer.update(delta);
     }
     
-    if (isFlyingFlag) {
-        // Lane switching
-        const targetX = currentLane * LANE_WIDTH;
-        player.position.x += (targetX - player.position.x) * 0.15;
-        // Player can move up/down with up/down keys or touch
-        if (keys['ArrowUp']) {
-            playerY += 0.4;
-        }
-        if (keys['ArrowDown']) {
-            playerY -= 0.4;
-        }
-        playerY = Math.max(1, Math.min(10, playerY));
-        player.scale.y = 1;
-        
-        // Force reset jump state when flying
-        if (isJumping) {
-            isJumping = false;
-            jumpVelocity = 0;
-            forceIdleAnimation();
-        }
-        
-        isSliding = false;
-        player.position.y = playerY;
-        // Camera follow
-        camera.position.x = player.position.x;
-        camera.position.z = player.position.z + 8;
-        camera.lookAt(player.position.x, player.position.y + 2, player.position.z - 5);
-        return;
-    }
-    
     // Lane switching
     const targetX = currentLane * LANE_WIDTH;
     player.position.x += (targetX - player.position.x) * 0.15;
@@ -211,11 +182,16 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
 function triggerJump() {
     if (!isJumping && !isSliding) { // Can't jump while sliding
         setIsJumping(true);
-        setJumpVelocity(JUMP_FORCE);
+        // If jump boost is active, increase jump velocity
+        if (hasJumpBoost) {
+            setJumpVelocity(JUMP_FORCE * 1.7); // 70% higher jump
+        } else {
+            setJumpVelocity(JUMP_FORCE);
+        }
         playJumpAnimation();
         
         // Debug log
-        console.log('Jump triggered - isJumping:', isJumping, 'jumpVelocity:', jumpVelocity);
+        console.log('Jump triggered - isJumping:', isJumping, 'jumpVelocity:', jumpVelocity, 'hasJumpBoost:', hasJumpBoost);
     }
 }
 
@@ -288,21 +264,6 @@ function handleDragMove(event) {
     const deltaX = event.clientX - lastDragX;
     const deltaY = lastDragY - event.clientY;
     
-    if (isFlying) {
-        setPlayerY(Math.max(1, Math.min(10, getPlayerY() + deltaY * 0.03)));
-        lastDragY = event.clientY;
-        if (Math.abs(deltaX) > 20) {
-            if (deltaX > 0 && currentLane < 1) {
-                incrementLane();
-                lastDragX = event.clientX;
-            } else if (deltaX < 0 && currentLane > -1) {
-                decrementLane();
-                lastDragX = event.clientX;
-            }
-        }
-        return;
-    }
-    
     // Horizontal movement (lane switching)
     if (Math.abs(deltaX) > 20) {
         if (deltaX > 0 && currentLane < 1) {
@@ -355,23 +316,6 @@ function handleTouchMove(event) {
     const SWIPE_THRESHOLD = 15;
     const HORIZONTAL_RATIO = 0.5;
     
-    if (isFlying) {
-        setPlayerY(Math.max(1, Math.min(10, getPlayerY() + (lastDragY - touch.clientY) * 0.03)));
-        lastDragY = touch.clientY;
-        if (Math.abs(totalDeltaX) > SWIPE_THRESHOLD && Math.abs(totalDeltaX) > HORIZONTAL_RATIO * Math.abs(totalDeltaY)) {
-            if (totalDeltaX > 0 && currentLane < 1) {
-                incrementLane();
-                dragStartX = touch.clientX;
-            } else if (totalDeltaX < 0 && currentLane > -1) {
-                decrementLane();
-                dragStartX = touch.clientX;
-            }
-        }
-        lastDragX = touch.clientX;
-        lastDragY = touch.clientY;
-        return;
-    }
-    
     // Horizontal movement (lane switching)
     if (Math.abs(totalDeltaX) > SWIPE_THRESHOLD && Math.abs(totalDeltaX) > HORIZONTAL_RATIO * Math.abs(totalDeltaY)) {
         if (totalDeltaX > 0 && currentLane < 1) {
@@ -419,11 +363,11 @@ export function resetPlayerState() {
     currentLane = 0;
     jumpVelocity = 0;
     playerY = 1;
-    isFlying = false;
+    hasJumpBoost = false;
     
-    if (flyTimeout) {
-        clearTimeout(flyTimeout);
-        flyTimeout = null;
+    if (jumpBoostTimeout) {
+        clearTimeout(jumpBoostTimeout);
+        jumpBoostTimeout = null;
     }
     
     if (player) {
@@ -457,20 +401,14 @@ export function getIsJumping() { return isJumping; }
 export function getIsSliding() { return isSliding; }
 export function getJumpVelocity() { return jumpVelocity; } 
 export function getPlayerY() { return playerY; }
+export function getIsFlying() { return isFlying; }
 
-// Fly power-up
-export function activateFlyPowerUp() {
-    isFlying = true;
-    // Reset jump state when flying
-    if (isJumping) {
-        isJumping = false;
-        jumpVelocity = 0;
-        forceIdleAnimation();
-    }
-    
-    if (flyTimeout) clearTimeout(flyTimeout);
-    flyTimeout = setTimeout(() => {
-        isFlying = false;
+// Jump boost power-up
+export function activateJumpBoostPowerUp() {
+    hasJumpBoost = true;
+    if (jumpBoostTimeout) clearTimeout(jumpBoostTimeout);
+    jumpBoostTimeout = setTimeout(() => {
+        hasJumpBoost = false;
     }, 5000);
 }
 
@@ -487,7 +425,7 @@ export function debugPlayerState() {
         jumpVelocity,
         playerY,
         currentLane,
-        isFlying,
+        hasJumpBoost,
         currentAction: currentAction ? currentAction._clip.name : 'none',
         hasJumpListener: !!jumpAnimationFinishedListener
     });

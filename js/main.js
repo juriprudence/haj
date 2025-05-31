@@ -1,10 +1,10 @@
 import { LANE_WIDTH, JUMP_FORCE, GRAVITY, SLIDE_HEIGHT, DOG_CATCH_DISTANCE } from './config.js';
 import { 
-    createPlayer, updatePlayer, activateFlyPowerUp, resetPlayerState,
+    createPlayer, updatePlayer, activateJumpBoostPowerUp, resetPlayerState,
     incrementLane, decrementLane, setCurrentLane, setPlayerY,
     setIsJumping, setIsSliding, setJumpVelocity, getCurrentLane,
     getPlayerY, getIsJumping, getIsSliding, getJumpVelocity,
-    isFlying, player, playerY, isJumping, isSliding, jumpVelocity,
+    player, playerY, isJumping, isSliding, jumpVelocity,
     currentLane, playerMixer, isModelLoaded, setupInputHandlers,
     setGameRunning
 } from './player.js';
@@ -42,7 +42,6 @@ let maxObstacles = 10;
 let maxCoins = 8;
 let maxParticles = 16;
 let powerUps = [];
-let flyTimeout = null;
 
 // Caches for performance optimization
 const geometryCache = new Map();
@@ -409,8 +408,6 @@ let currentFPS = 60;
             // Reset power-ups and fly state
             powerUps.forEach(p => scene.remove(p));
             powerUps.length = 0;
-            isFlying = false;
-            if (flyTimeout) clearTimeout(flyTimeout);
             resetPlayerState();
         }
         
@@ -523,7 +520,7 @@ let currentFPS = 60;
                 if (playerBox.intersectsBox(powerUpBox)) {
                     scene.remove(powerUp);
                     powerUps.splice(i, 1);
-                    activateFlyPowerUp();
+                    activateJumpBoostPowerUp();
                 }
             }
         }
@@ -532,7 +529,7 @@ let currentFPS = 60;
         function animate() {
             requestAnimationFrame(animate);
             if (isModelLoaded) {
-                updatePlayer(keys, camera, isFlying);
+                updatePlayer(keys, camera, false); // No flying
                 if (isGameRunning) {
                     updateWorld();
                     checkCollisions();

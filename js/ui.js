@@ -28,6 +28,7 @@ export function initUI() {
             <span>⚠️ الكلب يقترب!</span>
             <span id="dogDistance">50</span>
         </div>
+        <div id="levelDisplay"></div>
     `;
     document.body.appendChild(gameUI);
 
@@ -220,6 +221,19 @@ export function updateSmallHits(hits) {
     document.getElementById('smallHits').textContent = hits;
 }
 
+// Update level display
+export function updateLevelDisplay(level, levelConfig) {
+    const levelElement = document.getElementById('levelDisplay');
+    if (levelElement && levelConfig) {
+        levelElement.innerHTML = `
+            <div class="level-info">
+                <span class="level-number">Level ${level}</span><br>
+                <span class="level-name">${levelConfig.name}</span>
+            </div>
+        `;
+    }
+}
+
 // Show game over screen
 export function showGameOver(score, coins, reason, smallHits) {
     const gameOver = document.getElementById('gameOver');
@@ -323,4 +337,4 @@ function handleStartGame() {
         startMenu.style.display = 'none';
         window.startGame();
     };
-} 
+}

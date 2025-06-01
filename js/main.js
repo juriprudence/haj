@@ -12,7 +12,7 @@ import {
     initUI, updateScoreDisplay, updateDogWarning, updateSmallHits,
     showGameOver, hideGameOver, hideLoadingOverlay, initBackgroundMusic,
     playBackgroundMusic, stopBackgroundMusic, createWarningEffect,
-    showStartMenu, hideStartMenu
+    showStartMenu, hideStartMenu, updateLevelDisplay
 } from './ui.js';
 import { createObstacle, updateMovingObstacles, checkObstacleCollisions } from './obstacle.js';
 import { createCoin, createPowerUp, createParticleEffect,
@@ -149,6 +149,207 @@ function monitorPerformance() {
 let lastFPSCheck = 0;
 let currentFPS = 60;
         
+// --- LEVEL SYSTEM (Enhanced Difficulty) ---
+let currentLevel = 1;
+let levelStartTime = 0;
+let gameStartTime = 0;
+let levelDuration = 30000; // 30 seconds per level
+let difficultyMultiplier = 1;
+
+const LEVEL_CONFIG = {
+    1: {
+        name: "Beginner Valley",
+        obstacles: ['low', 'barrier'],
+        spawnRate: 0.015,
+        maxObstacles: 2,
+        speedMultiplier: 1.0,
+        description: "Welcome! Just basic obstacles to get started."
+    },
+    2: {
+        name: "Easy Plains",
+        obstacles: ['low', 'barrier', 'train'],
+        spawnRate: 0.018,
+        maxObstacles: 3,
+        speedMultiplier: 1.1,
+        description: "Trains appear! Watch out for longer obstacles."
+    },
+    3: {
+        name: "Moderate Hills",
+        obstacles: ['low', 'barrier', 'train', 'slide_barrier'],
+        spawnRate: 0.020,
+        maxObstacles: 4,
+        speedMultiplier: 1.2,
+        description: "Slide barriers introduced! Use sliding to get under them."
+    },
+    4: {
+        name: "Challenging Forest",
+        obstacles: ['low', 'barrier', 'train', 'slide_barrier', 'swinging_log'],
+        spawnRate: 0.022,
+        maxObstacles: 5,
+        speedMultiplier: 1.3,
+        description: "Swinging logs! Time your movements carefully."
+    },
+    5: {
+        name: "Advanced Canyon",
+        obstacles: ['low', 'barrier', 'train', 'slide_barrier', 'swinging_log', 'sliding_barrier'],
+        spawnRate: 0.025,
+        maxObstacles: 6,
+        speedMultiplier: 1.4,
+        description: "Moving barriers! They slide back and forth."
+    },
+    6: {
+        name: "Expert Mountains",
+        obstacles: ['barrier', 'train', 'slide_barrier', 'swinging_log', 'sliding_barrier', 'rotating_hammer'],
+        spawnRate: 0.028,
+        maxObstacles: 7,
+        speedMultiplier: 1.5,
+        description: "Rotating hammers! The ultimate challenge begins."
+    },
+    7: {
+        name: "Master Peak",
+        obstacles: ['train', 'slide_barrier', 'swinging_log', 'sliding_barrier', 'rotating_hammer'],
+        spawnRate: 0.030,
+        maxObstacles: 8,
+        speedMultiplier: 1.6,
+        description: "Only the hardest obstacles remain!"
+    },
+    8: {
+        name: "Legendary Summit",
+        obstacles: ['slide_barrier', 'swinging_log', 'sliding_barrier', 'rotating_hammer'],
+        spawnRate: 0.035,
+        maxObstacles: 10,
+        speedMultiplier: 1.7,
+        description: "Maximum difficulty! Good luck!"
+    }
+};
+
+function getCurrentLevelConfig() {
+    return LEVEL_CONFIG[currentLevel] || LEVEL_CONFIG[8];
+}
+
+function updateLevel() {
+    const currentTime = Date.now();
+    const totalPlayTime = currentTime - gameStartTime;
+    const newLevel = Math.floor(totalPlayTime / levelDuration) + 1;
+    if (newLevel !== currentLevel && newLevel <= Object.keys(LEVEL_CONFIG).length) {
+        currentLevel = newLevel;
+        levelStartTime = currentTime;
+        showLevelUpNotification(currentLevel);
+        difficultyMultiplier = getCurrentLevelConfig().speedMultiplier;
+        updateLevelDisplay(currentLevel);
+        console.log(`Level Up! Now at level ${currentLevel}: ${getCurrentLevelConfig().name}`);
+        console.log(`Description: ${getCurrentLevelConfig().description}`);
+    }
+}
+
+function spawnObstacleBasedOnLevel() {
+    const levelConfig = getCurrentLevelConfig();
+    if (Math.random() < levelConfig.spawnRate) {
+        if (obstacles.length >= levelConfig.maxObstacles) return;
+        const lane = Math.floor(Math.random() * 3) - 1;
+        const availableObstacles = levelConfig.obstacles;
+        const obstacleType = availableObstacles[Math.floor(Math.random() * availableObstacles.length)];
+        const spawnDistance = -80 - (currentLevel * 10) - Math.random() * 30;
+        const obstacle = createObstacle(obstacleType, lane, spawnDistance, scene, isLowEndDevice);
+        obstacles.push(obstacle);
+        console.log(`Spawned ${obstacleType} at level ${currentLevel} in lane ${lane}`);
+    }
+}
+
+function updateGameSpeedForLevel() {
+    const baseSpeed = 0.2;
+    const levelConfig = getCurrentLevelConfig();
+    const timeInLevel = (Date.now() - levelStartTime) / levelDuration;
+    const levelSpeedBonus = timeInLevel * 0.1;
+    gameSpeed = Math.min(0.8, baseSpeed * levelConfig.speedMultiplier + levelSpeedBonus);
+}
+
+function initLevelSystem() {
+    gameStartTime = Date.now();
+    levelStartTime = gameStartTime;
+    currentLevel = 1;
+    difficultyMultiplier = 1;
+    updateLevelDisplay(1);
+    console.log(`Starting Level 1: ${getCurrentLevelConfig().name}`);
+    console.log(`Description: ${getCurrentLevelConfig().description}`);
+}
+
+function resetLevelSystem() {
+    initLevelSystem();
+    updateLevelDisplay(1);
+}
+
+function showLevelUpNotification(level) {
+    const levelConfig = getCurrentLevelConfig();
+    const notification = document.createElement('div');
+    notification.className = 'level-notification';
+    notification.innerHTML = `
+        <div class="level-up-content">
+            <h2>LEVEL ${level}</h2>
+            <h3>${levelConfig.name}</h3>
+            <p>${levelConfig.description}</p>
+        </div>
+    `;
+    notification.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
+        z-index: 1000;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        animation: levelUpPulse 3s ease-in-out;
+        font-family: Arial, sans-serif;
+    `;
+    if (!document.querySelector('#levelUpStyles')) {
+        const style = document.createElement('style');
+        style.id = 'levelUpStyles';
+        style.textContent = `
+            @keyframes levelUpPulse {
+                0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+                20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+                80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+            }
+            .level-up-content h2 {
+                margin: 0 0 10px 0;
+                font-size: 2em;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            }
+            .level-up-content h3 {
+                margin: 0 0 15px 0;
+                font-size: 1.3em;
+                color: #ffd700;
+            }
+            .level-up-content p {
+                margin: 0;
+                font-size: 1em;
+                opacity: 0.9;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 3000);
+}
+
+// Remove the duplicate updateLevelDisplay function definition here.
+// Only use the imported updateLevelDisplay from './ui.js'.
+
+function getLevelProgress() {
+    const timeSinceStart = Date.now() - levelStartTime;
+    return Math.min(1, timeSinceStart / levelDuration);
+}
+// --- END LEVEL SYSTEM ---
+
 // Initialize the game
 function init() {
     // Detect device capabilities first
@@ -156,6 +357,7 @@ function init() {
     // Initialize UI
     initUI();
     initSounds();
+    initLevelSystem();
     
     // Create scene
     scene = new THREE.Scene();
@@ -230,68 +432,45 @@ function createDog() {
 }
         
 // Update world
-function updateWorld() {
-    // Use the improved ground update function
+function updateWorldWithLevels() {
+    updateLevel();
+    updateGameSpeedForLevel();
     updateGround(ground, gameSpeed);
-    
-    // Move and remove obstacles
     for (let i = obstacles.length - 1; i >= 0; i--) {
         const obstacle = obstacles[i];
         obstacle.position.z += gameSpeed;
-        
         if (obstacle.position.z > 10) {
             scene.remove(obstacle);
             obstacles.splice(i, 1);
         }
     }
-    
-    // Update moving obstacles (NEW FEATURE)
     updateMovingObstacles(obstacles);
-    
-    // Move and remove coins
     for (let i = coins.length - 1; i >= 0; i--) {
         const coin = coins[i];
         coin.position.z += gameSpeed;
         coin.rotation.y += 0.1;
-        
-        // Update chicken animation (NEW FEATURE)
         updateChicken(coin);
-        
         if (coin.position.z > 10) {
             scene.remove(coin);
             coins.splice(i, 1);
         }
     }
-    
-    // Move dog with world
     if (dog && !isDogChasing) {
         dog.position.z += gameSpeed;
     }
-    
-    // Spawn new obstacles and coins with enhanced variety
-    if (Math.random() < 0.02) {
-        const lane = Math.floor(Math.random() * 3) - 1;
-        // Enhanced obstacle types including new dynamic obstacles
-        const types = ['barrier', 'low', 'train', 'slide_barrier', 'swinging_log', 'sliding_barrier', 'rotating_hammer'];
-        const type = types[Math.floor(Math.random() * types.length)];
-        const obstacle = createObstacle(type, lane, -100 - Math.random() * 50, scene, isLowEndDevice);
-        obstacles.push(obstacle);
-    }
-    
-    if (Math.random() < 0.03) {
+    spawnObstacleBasedOnLevel();
+    const coinSpawnRate = 0.03 + (currentLevel * 0.005);
+    if (Math.random() < coinSpawnRate) {
         const lane = Math.floor(Math.random() * 3) - 1;
         const coin = createCoin(lane, -80 - Math.random() * 40, scene);
         coins.push(coin);
     }
-    
-    // Spawn power-up occasionally
-    if (Math.random() < 0.01) {
+    const powerUpSpawnRate = Math.max(0.005, 0.015 - (currentLevel * 0.001));
+    if (Math.random() < powerUpSpawnRate) {
         const lane = Math.floor(Math.random() * 3) - 1;
         const powerUp = createPowerUp(lane, -90 - Math.random() * 40, scene);
         powerUps.push(powerUp);
     }
-    
-    // Move and remove power-ups
     for (let i = powerUps.length - 1; i >= 0; i--) {
         const powerUp = powerUps[i];
         powerUp.position.z += gameSpeed;
@@ -300,14 +479,12 @@ function updateWorld() {
             powerUps.splice(i, 1);
         }
     }
-    
-    // Regular memory cleanup
-    if (frameCount % 300 === 0) { // Every 5 seconds at 60fps
+    if (frameCount % 300 === 0) {
         cleanupMemory();
     }
     monitorPerformance();
 }
-        
+
 // Memory cleanup function
 function cleanupMemory() {
     // Remove distant obstacles
@@ -422,6 +599,7 @@ function restartGame() {
     powerUps.forEach(p => scene.remove(p));
     powerUps.length = 0;
     resetPlayerState();
+    resetLevelSystem();
 }
         
 // Handle small obstacle hit
@@ -527,17 +705,21 @@ function checkCollisions() {
 function animate() {
     requestAnimationFrame(animate);
     if (isModelLoaded) {
-        updatePlayer(keys, camera, false); // No flying
+        updatePlayer(keys, camera, false);
         if (isGameRunning) {
-            updateWorld();
+            updateWorldWithLevels();
             checkCollisions();
             updateParticles(particles, scene);
             updateScore();
+            // Update level progress bar
+            const progress = getLevelProgress() * 100;
+            const progressBar = document.getElementById('levelProgressBar');
+            if (progressBar) {
+                progressBar.style.width = `${progress}%`;
+            }
         }
     }
-    // Update player animation (faster)
-    if (playerMixer) playerMixer.update(1/45); // Double speed
-    // Update dog animation
+    if (playerMixer) playerMixer.update(1/45);
     if (dogMixer) dogMixer.update(1/45);
     renderer.render(scene, camera);
 }

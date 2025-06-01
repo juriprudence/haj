@@ -19,8 +19,165 @@ let lastDragX = 0, lastDragY = 0;
 let keys = {};
 let isGameRunning = false;
 
+// Particle system variables
+let scene = null;
+let jumpParticles = [];
+let landingParticles = [];
+
+// Function to create jump particles (dust clouds)
+function createJumpParticles(position) {
+    if (!scene) return [];
+    
+    const particles = [];
+    const particleCount = 6;
+    
+    for (let i = 0; i < particleCount; i++) {
+        const particleGeometry = new THREE.SphereGeometry(0.05, 6, 6);
+        const particleMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0x8B4513, // Brown dust color
+            transparent: true,
+            opacity: 0.8
+        });
+        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+        
+        // Position particles around the jump point
+        particle.position.set(
+            position.x + (Math.random() - 0.5) * 1.5,
+            position.y + 0.1,
+            position.z + (Math.random() - 0.5) * 1.5
+        );
+        
+        // Set velocity for particles
+        particle.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.1,
+            Math.random() * 0.05 + 0.02,
+            (Math.random() - 0.5) * 0.1
+        );
+        
+        particle.life = 1.0;
+        particle.decay = 0.02;
+        
+        scene.add(particle);
+        particles.push(particle);
+    }
+    
+    return particles;
+}
+
+// Function to create landing particles (impact sparks)
+function createLandingParticles(position) {
+    if (!scene) return [];
+    
+    const particles = [];
+    const particleCount = 8;
+    
+    for (let i = 0; i < particleCount; i++) {
+        const particleGeometry = new THREE.SphereGeometry(0.03, 4, 4);
+        const particleMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0xFFD700, // Golden sparks
+            transparent: true,
+            opacity: 1.0,
+            emissive: 0xFFD700,
+            emissiveIntensity: 0.3
+        });
+        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+        
+        // Position particles at landing point
+        particle.position.set(
+            position.x + (Math.random() - 0.5) * 0.8,
+            position.y + 0.05,
+            position.z + (Math.random() - 0.5) * 0.8
+        );
+        
+        // Set velocity for sparks (more horizontal spread)
+        particle.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.15,
+            Math.random() * 0.08 + 0.03,
+            (Math.random() - 0.5) * 0.15
+        );
+        
+        particle.life = 1.0;
+        particle.decay = 0.04; // Faster decay for sparks
+        
+        scene.add(particle);
+        particles.push(particle);
+    }
+    
+    return particles;
+}
+
+// Function to update particle systems
+function updatePlayerParticles() {
+    // Update jump particles
+    for (let i = jumpParticles.length - 1; i >= 0; i--) {
+        const particle = jumpParticles[i];
+        
+        // Update position
+        particle.position.add(particle.velocity);
+        particle.velocity.y -= 0.008; // Gravity effect
+        particle.velocity.multiplyScalar(0.98); // Air resistance
+        
+        // Update life and opacity
+        particle.life -= particle.decay;
+        particle.material.opacity = particle.life;
+        
+        // Remove dead particles
+        if (particle.life <= 0) {
+            scene.remove(particle);
+            particle.geometry.dispose();
+            particle.material.dispose();
+            jumpParticles.splice(i, 1);
+        }
+    }
+    
+    // Update landing particles
+    for (let i = landingParticles.length - 1; i >= 0; i--) {
+        const particle = landingParticles[i];
+        
+        // Update position
+        particle.position.add(particle.velocity);
+        particle.velocity.y -= 0.012; // Stronger gravity for sparks
+        particle.velocity.multiplyScalar(0.96); // More air resistance
+        
+        // Update life and opacity
+        particle.life -= particle.decay;
+        particle.material.opacity = particle.life;
+        particle.material.emissiveIntensity = particle.life * 0.3;
+        
+        // Remove dead particles
+        if (particle.life <= 0) {
+            scene.remove(particle);
+            particle.geometry.dispose();
+            particle.material.dispose();
+            landingParticles.splice(i, 1);
+        }
+    }
+}
+
+// Function to clean up all particles
+function cleanupPlayerParticles() {
+    // Clean up jump particles
+    jumpParticles.forEach(particle => {
+        scene.remove(particle);
+        particle.geometry.dispose();
+        particle.material.dispose();
+    });
+    jumpParticles.length = 0;
+    
+    // Clean up landing particles
+    landingParticles.forEach(particle => {
+        scene.remove(particle);
+        particle.geometry.dispose();
+        particle.material.dispose();
+    });
+    landingParticles.length = 0;
+}
+
 // Player creation (GLB loader)
-export function createPlayer(scene, onLoaded) {
+export function createPlayer(gameScene, onLoaded) {
+    // Store scene reference for particles
+    scene = gameScene;
+    
     const loader = new THREE.GLTFLoader();
     loader.load('tow.glb', function(gltf) {
         player = gltf.scene;
@@ -199,9 +356,15 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
         playerMixer.update(delta);
     }
     
+    // Update particle systems
+    updatePlayerParticles();
+    
     // Lane switching
     const targetX = currentLane * LANE_WIDTH;
     player.position.x += (targetX - player.position.x) * 0.15;
+    
+    // Track previous jump state for landing detection
+    const wasJumping = isJumping && playerY > 1.1;
     
     // Jumping with better state management
     if (isJumping) {
@@ -213,6 +376,12 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
             playerY = 1;
             isJumping = false;
             jumpVelocity = 0;
+            
+            // Create landing particles if we were actually jumping
+            if (wasJumping && player) {
+                const newLandingParticles = createLandingParticles(player.position);
+                landingParticles.push(...newLandingParticles);
+            }
             
             // Ensure we return to idle animation
             setTimeout(() => {
@@ -240,7 +409,7 @@ export function updatePlayer(keys, camera, isFlyingFlag) {
     camera.lookAt(player.position.x, player.position.y + 2, player.position.z - 5);
 }
 
-// Modified jump function with better state management
+// Modified jump function with better state management and particles
 function triggerJump() {
     // Prevent jumping while flying or sliding
     if (!isJumping && !isSliding) {
@@ -251,6 +420,13 @@ function triggerJump() {
         } else {
             setJumpVelocity(JUMP_FORCE);
         }
+        
+        // Create jump particles
+        if (player) {
+            const newJumpParticles = createJumpParticles(player.position);
+            jumpParticles.push(...newJumpParticles);
+        }
+        
         playJumpAnimation();
         playJumpSound();
         // Debug log
@@ -420,6 +596,9 @@ export function resetPlayerState() {
         jumpAnimationFinishedListener = null;
     }
     
+    // Clean up particles
+    cleanupPlayerParticles();
+    
     // Reset all state variables
     isJumping = false;
     isSliding = false;
@@ -490,6 +669,8 @@ export function debugPlayerState() {
         currentLane,
         hasJumpBoost,
         currentAction: currentAction ? currentAction._clip.name : 'none',
-        hasJumpListener: !!jumpAnimationFinishedListener
+        hasJumpListener: !!jumpAnimationFinishedListener,
+        jumpParticles: jumpParticles.length,
+        landingParticles: landingParticles.length
     });
 }

@@ -317,10 +317,10 @@ function handleStartGame() {
     transitionVideo.style.display = 'block';
     transitionVideo.currentTime = 0;
     transitionVideo.play();
-    
-    // After 3 seconds, hide the menu and start the game
-    setTimeout(() => {
+
+    // Start the game when the transition video ends
+    transitionVideo.onended = () => {
         startMenu.style.display = 'none';
         window.startGame();
-    }, 5000);
+    };
 } 

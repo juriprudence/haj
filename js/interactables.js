@@ -97,11 +97,173 @@ export function createObstacle(type, lane, z, scene, isLowEndDevice) {
             barrierGroup.height = 3;
             obstacle = barrierGroup;
             break;
+        case 'swinging_log':
+            // Create swinging log obstacle
+            const swingingGroup = new THREE.Group();
+            
+            // Support posts
+            const supportGeometry = new THREE.BoxGeometry(0.4, 6, 0.4);
+            const supportMaterial = new THREE.MeshLambertMaterial({ map: obstacleTexture });
+            const leftSupport = new THREE.Mesh(supportGeometry, supportMaterial);
+            leftSupport.position.set(-3, 3, 0);
+            const rightSupport = new THREE.Mesh(supportGeometry, supportMaterial);
+            rightSupport.position.set(3, 3, 0);
+            swingingGroup.add(leftSupport, rightSupport);
+            
+            // Top beam
+            const beamGeometry = new THREE.BoxGeometry(6.5, 0.3, 0.4);
+            const beamMaterial = new THREE.MeshLambertMaterial({ map: obstacleTexture });
+            const topBeam = new THREE.Mesh(beamGeometry, beamMaterial);
+            topBeam.position.set(0, 6, 0);
+            swingingGroup.add(topBeam);
+            
+            // Swinging log
+            const logGeometry = new THREE.CylinderGeometry(0.3, 0.3, 4, 12);
+            const logMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const log = new THREE.Mesh(logGeometry, logMaterial);
+            log.rotation.z = Math.PI / 2; // Make it horizontal
+            
+            // Chain links (simplified)
+            const chainGroup = new THREE.Group();
+            for (let i = 0; i < 3; i++) {
+                const linkGeometry = new THREE.RingGeometry(0.1, 0.15, 8);
+                const linkMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+                const link = new THREE.Mesh(linkGeometry, linkMaterial);
+                link.position.y = -i * 0.3;
+                chainGroup.add(link);
+            }
+            
+            // Pivot point for swinging
+            const pivotGroup = new THREE.Group();
+            chainGroup.position.y = -1;
+            log.position.y = -2.5;
+            pivotGroup.add(chainGroup, log);
+            pivotGroup.position.set(0, 6, 0);
+            
+            swingingGroup.add(pivotGroup);
+            swingingGroup.position.set(x, 0, z);
+            
+            // Animation properties
+            swingingGroup.userData = {
+                pivotGroup: pivotGroup,
+                swingAngle: 0,
+                swingSpeed: 0.02 + Math.random() * 0.01, // Random speed
+                swingAmplitude: Math.PI / 3 // 60 degrees
+            };
+            
+            obstacle = swingingGroup;
+            obstacle.height = 4;
+            break;
+        case 'sliding_barrier':
+            // Create horizontally sliding barrier
+            const slidingGroup = new THREE.Group();
+            
+            // Track posts
+            const trackPostGeometry = new THREE.BoxGeometry(0.3, 4, 0.3);
+            const trackPostMaterial = new THREE.MeshLambertMaterial({ map: obstacleTexture });
+            const trackLeft = new THREE.Mesh(trackPostGeometry, trackPostMaterial);
+            trackLeft.position.set(-4, 2, 0);
+            const trackRight = new THREE.Mesh(trackPostGeometry, trackPostMaterial);
+            trackRight.position.set(4, 2, 0);
+            slidingGroup.add(trackLeft, trackRight);
+            
+            // Track rail
+            const railGeometry = new THREE.BoxGeometry(8.5, 0.2, 0.2);
+            const railMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            const rail = new THREE.Mesh(railGeometry, railMaterial);
+            rail.position.set(0, 3.5, 0);
+            slidingGroup.add(rail);
+            
+            // Moving barrier
+            const movingBarrierGeometry = new THREE.BoxGeometry(1.5, 3, 0.5);
+            const movingBarrierMaterial = new THREE.MeshLambertMaterial({ map: obstacleTexture });
+            const movingBarrier = new THREE.Mesh(movingBarrierGeometry, movingBarrierMaterial);
+            movingBarrier.position.set(0, 1.5, 0);
+            
+            slidingGroup.add(movingBarrier);
+            slidingGroup.position.set(x, 0, z);
+            
+            // Animation properties
+            slidingGroup.userData = {
+                movingBarrier: movingBarrier,
+                slidePosition: 0,
+                slideSpeed: 0.03 + Math.random() * 0.02, // Random speed
+                slideRange: 3 // How far it slides
+            };
+            
+            obstacle = slidingGroup;
+            obstacle.height = 3;
+            break;
+        case 'rotating_hammer':
+            // Create rotating hammer obstacle
+            const hammerGroup = new THREE.Group();
+            
+            // Central post
+            const hammerPostGeometry = new THREE.CylinderGeometry(0.3, 0.3, 5, 12);
+            const hammerPostMaterial = new THREE.MeshLambertMaterial({ map: obstacleTexture });
+            const hammerPost = new THREE.Mesh(hammerPostGeometry, hammerPostMaterial);
+            hammerPost.position.y = 2.5;
+            hammerGroup.add(hammerPost);
+            
+            // Rotating arm
+            const armGeometry = new THREE.BoxGeometry(6, 0.4, 0.4);
+            const armMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const arm = new THREE.Mesh(armGeometry, armMaterial);
+            
+            // Hammer heads at both ends
+            const hammerHeadGeometry = new THREE.BoxGeometry(0.8, 1.2, 0.8);
+            const hammerHeadMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+            const hammerHead1 = new THREE.Mesh(hammerHeadGeometry, hammerHeadMaterial);
+            hammerHead1.position.set(-3, 0, 0);
+            const hammerHead2 = new THREE.Mesh(hammerHeadGeometry, hammerHeadMaterial);
+            hammerHead2.position.set(3, 0, 0);
+            
+            // Rotating group
+            const rotatingGroup = new THREE.Group();
+            rotatingGroup.add(arm, hammerHead1, hammerHead2);
+            rotatingGroup.position.y = 3;
+            
+            hammerGroup.add(rotatingGroup);
+            hammerGroup.position.set(x, 0, z);
+            
+            // Animation properties
+            hammerGroup.userData = {
+                rotatingGroup: rotatingGroup,
+                rotationSpeed: 0.04 + Math.random() * 0.02 // Random speed
+            };
+            
+            obstacle = hammerGroup;
+            obstacle.height = 4;
+            break;
     }
     obstacle.castShadow = true;
     obstacle.obstacleType = type;
     scene.add(obstacle);
     return obstacle;
+}
+
+// Update moving obstacles
+export function updateMovingObstacles(obstacles) {
+    obstacles.forEach(obstacle => {
+        if (obstacle.obstacleType === 'swinging_log' && obstacle.userData.pivotGroup) {
+            // Update swinging log
+            obstacle.userData.swingAngle += obstacle.userData.swingSpeed;
+            const swing = Math.sin(obstacle.userData.swingAngle) * obstacle.userData.swingAmplitude;
+            obstacle.userData.pivotGroup.rotation.z = swing;
+        }
+        
+        if (obstacle.obstacleType === 'sliding_barrier' && obstacle.userData.movingBarrier) {
+            // Update sliding barrier
+            obstacle.userData.slidePosition += obstacle.userData.slideSpeed;
+            const slide = Math.sin(obstacle.userData.slidePosition) * obstacle.userData.slideRange;
+            obstacle.userData.movingBarrier.position.x = slide;
+        }
+        
+        if (obstacle.obstacleType === 'rotating_hammer' && obstacle.userData.rotatingGroup) {
+            // Update rotating hammer
+            obstacle.userData.rotatingGroup.rotation.y += obstacle.userData.rotationSpeed;
+        }
+    });
 }
 
 // Create coin (now as a small chicken)

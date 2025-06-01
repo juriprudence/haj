@@ -11,7 +11,7 @@ export function initSounds() {
     if (!backgroundAudio) {
         backgroundAudio = new Audio('sound/Allaoui.mp3');
         backgroundAudio.loop = true;
-        backgroundAudio.volume = 0.1;
+        backgroundAudio.volume = 0;
     }
     // Jump sound
     if (!jumpAudio) {

@@ -14,9 +14,9 @@ import {
     playBackgroundMusic, stopBackgroundMusic, createWarningEffect,
     showStartMenu, hideStartMenu
 } from './ui.js';
-import {
-    createObstacle, createCoin, createPowerUp, createParticleEffect,
-    updateParticles, disposeObject, updateMovingObstacles, updateChicken
+import { createObstacle, updateMovingObstacles, checkObstacleCollisions } from './obstacle.js';
+import { createCoin, createPowerUp, createParticleEffect,
+    updateParticles, disposeObject, updateChicken
 } from './interactables.js';
 import { createGround, updateGround, disposeGround } from './ground.js';
 import { 
@@ -447,7 +447,6 @@ function handleSmallObstacleHit() {
 // Enhanced collision detection for new obstacle types
 function checkCollisions() {
     if (!player) return;
-    // Use a bounding box only around the visible mesh of the player model
     let playerBox = null;
     player.traverse(function(child) {
         if (child.isMesh) {
@@ -460,69 +459,23 @@ function checkCollisions() {
         }
     });
     if (!playerBox) return;
-    playerBox.expandByScalar(0.5); // Slightly expand for GLB model
-    
-    // Check obstacle collisions
-    obstacles.forEach(obstacle => {
-        const obstacleBox = new THREE.Box3().setFromObject(obstacle);
-        
-        if (playerBox.intersectsBox(obstacleBox)) {
-            // Handle specific collision logic for each obstacle type
-            switch (obstacle.obstacleType) {
-                case 'low':
-                    if (isJumping && playerY > 2) {
-                        playHitAnimation(true);
-                        return;
-                    }
-                    // Small obstacle hit - trigger dog chase
-                    playHitAnimation(isJumping);
-                    handleSmallObstacleHit();
-                    scene.remove(obstacle);
-                    const index = obstacles.indexOf(obstacle);
-                    if (index > -1) {
-                        obstacles.splice(index, 1);
-                    }
-                    break;
-                    
-                case 'barrier':
-                    if (isSliding) {
-                        playHitAnimation(false);
-                        return;
-                    }
-                    // Large obstacle hit
-                    handleLargeObstacleHit(obstacle);
-                    break;
-                    
-                case 'slide_barrier':
-                    if (isSliding) {
-                        return; // Player can slide under
-                    }
-                    gameOver('obstacle');
-                    break;
-                    
-                case 'swinging_log':
-                case 'sliding_barrier':
-                case 'rotating_hammer':
-                    // These dynamic obstacles require timing to avoid
-                    if (isJumping && playerY > 3) {
-                        playHitAnimation(true);
-                        return; // Jumped over
-                    }
-                    if (isSliding && obstacle.obstacleType === 'rotating_hammer') {
-                        playHitAnimation(false);
-                        return; // Slid under rotating hammer
-                    }
-                    handleLargeObstacleHit(obstacle);
-                    break;
-                    
-                case 'train':
-                default:
-                    handleLargeObstacleHit(obstacle);
-                    break;
-            }
-        }
-    });
-    
+    playerBox.expandByScalar(0.5);
+    // Check obstacle collisions with full context
+    checkObstacleCollisions(
+        player,
+        obstacles,
+        handleSmallObstacleHit,
+        scene,
+        isJumping,
+        isSliding,
+        playerY,
+        playHitAnimation,
+        playHitAnimationAndFreeze, // Use the imported function directly, not require()
+        dog,
+        playDogBark,
+        setGameRunning,
+        gameOver
+    );
     // Check coin collisions
     for (let i = coins.length - 1; i >= 0; i--) {
         const coin = coins[i];
@@ -538,7 +491,6 @@ function checkCollisions() {
             playChickenSound();
         }
     }
-    
     // Check power-up collisions
     for (let i = powerUps.length - 1; i >= 0; i--) {
         const powerUp = powerUps[i];
@@ -552,24 +504,24 @@ function checkCollisions() {
 }
 
 // Handle large obstacle collision
-function handleLargeObstacleHit(obstacle) {
-    const obstacleBox = new THREE.Box3().setFromObject(obstacle);
-    const playerBox = new THREE.Box3().setFromObject(player);
-    player.position.z = obstacleBox.max.z + (playerBox.max.z - playerBox.min.z) / 2 + 0.1;
-    playHitAnimationAndFreeze(isJumping);
+// function handleLargeObstacleHit(obstacle) {
+//     const obstacleBox = new THREE.Box3().setFromObject(obstacle);
+//     const playerBox = new THREE.Box3().setFromObject(player);
+//     player.position.z = obstacleBox.max.z + (playerBox.max.z - playerBox.min.z) / 2 + 0.1;
+//     playHitAnimationAndFreeze(isJumping);
     
-    if (dog && player) {
-        dog.position.set(player.position.x, player.position.y, player.position.z + 1.5);
-        playDogBark();
-        if (dog.lookAt) dog.lookAt(player.position);
-    }
+//     if (dog && player) {
+//         dog.position.set(player.position.x, player.position.y, player.position.z + 1.5);
+//         playDogBark();
+//         if (dog.lookAt) dog.lookAt(player.position);
+//     }
     
-    isGameRunning = false;
-    setGameRunning(false);
-    setTimeout(() => {
-        gameOver('obstacle');
-    }, 700);
-}
+//     isGameRunning = false;
+//     setGameRunning(false);
+//     setTimeout(() => {
+//         gameOver('obstacle');
+//     }, 700);
+// }
         
 // Main animation loop
 function animate() {
@@ -599,6 +551,16 @@ window.startGame = function() {
     isGameRunning = true;
     setGameRunning(true);
 };
+        
+// Ensure these are available globally for obstacle.js collision/game over logic
+window.isJumping = isJumping;
+window.isGameRunning = isGameRunning;
+window.setGameRunning = setGameRunning;
+window.playHitAnimationAndFreeze = playHitAnimationAndFreeze;
+window.dog = dog;
+window.player = player;
+window.playDogBark = playDogBark;
+window.gameOver = gameOver;
         
 // Start the game
 init();

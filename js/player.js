@@ -9,7 +9,7 @@ let jumpBoostTimeout = null;
 export let playerMixer, isModelLoaded = false;
 
 // Animation variables
-let idleAction, jumpAction;
+let idleAction, jumpAction, hitAction;
 let currentAction = null;
 let jumpAnimationFinishedListener = null; // Track the listener
 
@@ -38,19 +38,23 @@ export function createPlayer(scene, onLoaded) {
         // Animation setup
         if (gltf.animations && gltf.animations.length > 0) {
             playerMixer = new THREE.AnimationMixer(player);
-            
             // Set up idle animation (first animation)
             if (gltf.animations[0]) {
                 idleAction = playerMixer.clipAction(gltf.animations[0]);
                 idleAction.play();
                 currentAction = idleAction;
             }
-            
             // Set up jump animation (second animation)
             if (gltf.animations[1]) {
                 jumpAction = playerMixer.clipAction(gltf.animations[1]);
                 jumpAction.setLoop(THREE.LoopOnce);
                 jumpAction.clampWhenFinished = true;
+            }
+            // Set up hit animation (third animation)
+            if (gltf.animations[2]) {
+                hitAction = playerMixer.clipAction(gltf.animations[2]);
+                hitAction.setLoop(THREE.LoopOnce);
+                hitAction.clampWhenFinished = true;
             }
         }
         
@@ -126,6 +130,62 @@ function forceIdleAnimation() {
     idleAction.fadeIn(0.2);
     idleAction.play();
     currentAction = idleAction;
+}
+
+// Play hit animation
+export function playHitAnimation(isJumpingState) {
+    if (!playerMixer || !hitAction) return;
+    // Remove any existing event listener first
+    playerMixer.stopAllAction();
+    if (isJumpingState) {
+        // Play from the start
+        hitAction.reset();
+        hitAction.time = 0;
+        hitAction.fadeIn(0.05);
+        hitAction.play();
+    } else {
+        // Play from halfway (second half)
+        const duration = hitAction.getClip().duration;
+        hitAction.reset();
+        hitAction.time = duration / 2;
+        hitAction.fadeIn(0.05);
+        hitAction.play();
+    }
+    currentAction = hitAction;
+    // Return to idle after hit animation
+    playerMixer.addEventListener('finished', function onHitFinished(event) {
+        if (event.action === hitAction) {
+            playerMixer.removeEventListener('finished', onHitFinished);
+            forceIdleAnimation();
+        }
+    });
+}
+
+// Play hit animation and freeze on last frame (for big obstacle)
+export function playHitAnimationAndFreeze(isJumpingState) {
+    if (!playerMixer || !hitAction) return;
+    playerMixer.stopAllAction();
+    if (isJumpingState) {
+        hitAction.reset();
+        hitAction.time = 0;
+        hitAction.fadeIn(0.05);
+        hitAction.play();
+    } else {
+        const duration = hitAction.getClip().duration;
+        hitAction.reset();
+        hitAction.time = duration / 2;
+        hitAction.fadeIn(0.05);
+        hitAction.play();
+    }
+    currentAction = hitAction;
+    // Remove any previous finished listeners so animation does not revert to idle
+    playerMixer._listeners = playerMixer._listeners || {};
+    if (playerMixer._listeners['finished']) {
+        playerMixer._listeners['finished'] = playerMixer._listeners['finished'].filter(fn => false);
+    }
+    // When finished, freeze on last frame
+    hitAction.clampWhenFinished = true;
+    hitAction.setLoop(THREE.LoopOnce);
 }
 
 // Player update logic

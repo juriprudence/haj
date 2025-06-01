@@ -6,7 +6,7 @@ import {
     getPlayerY, getIsJumping, getIsSliding, getJumpVelocity,
     player, playerY, isJumping, isSliding, jumpVelocity,
     currentLane, playerMixer, isModelLoaded, setupInputHandlers,
-    setGameRunning
+    setGameRunning, playHitAnimation, playHitAnimationAndFreeze
 } from './player.js';
 import {
     initUI, updateScoreDisplay, updateDogWarning, updateSmallHits,
@@ -460,9 +460,13 @@ let currentFPS = 60;
                 // Fix: Only trigger game over for slide_barrier if player is NOT sliding, otherwise ignore collision
                 if (playerBox.intersectsBox(obstacleBox)) {
                     if (obstacle.obstacleType === 'low' && isJumping && playerY > 2) {
+                        // Play hit animation from start (jumping)
+                        playHitAnimation(true);
                         return; // Jumped over low obstacle
                     }
                     if (obstacle.obstacleType === 'barrier' && isSliding) {
+                        // Play hit animation from second half (walking)
+                        playHitAnimation(false);
                         return; // Slid under barrier
                     }
                     if (obstacle.obstacleType === 'slide_barrier') {
@@ -478,6 +482,7 @@ let currentFPS = 60;
                     // Handle different collision types
                     if (obstacle.obstacleType === 'low') {
                         // Small obstacle hit - don't end game, but trigger dog chase
+                        playHitAnimation(isJumping);
                         handleSmallObstacleHit();
                         // Remove the obstacle so it doesn't hit again
                         scene.remove(obstacle);
@@ -487,10 +492,10 @@ let currentFPS = 60;
                         }
                     } else {
                         // Large obstacle hit - dog attacks, then game over
+                        playHitAnimationAndFreeze(isJumping);
                         if (dog && player) {
                             dog.position.set(player.position.x, player.position.y, player.position.z + 1.5); // In front of player
                             playDogBark();
-                            
                             if (dog.lookAt) dog.lookAt(player.position);
                         }
                         // Do NOT show dog warning UI

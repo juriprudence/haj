@@ -26,6 +26,7 @@ export function createPlayer(scene, onLoaded) {
         player = gltf.scene;
         player.position.set(0, playerY, 0);
         player.scale.set(2.5, 2.5, 2.5);
+        player.rotation.y = Math.PI; // Rotate 180 degrees to face the root
         player.traverse(function(child) {
             if (child.isMesh) {
                 child.castShadow = true;
